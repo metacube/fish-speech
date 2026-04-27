@@ -206,8 +206,13 @@ def decode_n_tokens(
     # [MODIFIED] Pre-fetch ID for efficiency loop
     im_end_id = model.tokenizer.get_token_id(IM_END_TOKEN)
 
+    # MATH was the original choice because torch.compile/Inductor codegens it
+    # well on CUDA. On ROCm 7.2 / gfx1151 in eager mode it's the worst-case
+    # O(N²)-memory path. Prefer EFFICIENT_ATTENTION (gated by
+    # TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL=1 on AMD), fall back to MATH.
+    sdp_backends = [SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH]
     for i in tqdm(range(num_new_tokens)):
-        with sdpa_kernel(SDPBackend.MATH):
+        with sdpa_kernel(sdp_backends):
             next_token = decode_one_token(
                 model=model,
                 x=cur_token,

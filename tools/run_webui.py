@@ -2,6 +2,12 @@ import os
 from argparse import ArgumentParser
 from pathlib import Path
 
+# Ungate AOTRITON's mem-efficient/flash attention kernels on ROCm. No-op on
+# CUDA (the variable is read only by the AMD codepaths). Must be set before
+# `import torch`. On gfx1151 (Strix Halo) this raises decode throughput by
+# ~2.2x over the eager-MATH default (1.0 → 2.2 tok/s on S2 Pro).
+os.environ.setdefault("TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL", "1")
+
 import pyrootutils
 import torch
 from loguru import logger
