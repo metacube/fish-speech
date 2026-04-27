@@ -5,6 +5,10 @@ import re
 from argparse import Namespace
 from threading import Lock
 
+# Ungate AOTRITON's mem-efficient/flash attention kernels on ROCm (no-op on
+# CUDA). Mirrors tools/run_webui.py — must be set before `import torch`.
+os.environ.setdefault("TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL", "1")
+
 import pyrootutils
 import uvicorn
 from kui.asgi import (
