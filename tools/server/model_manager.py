@@ -1,3 +1,5 @@
+import os
+
 import torch
 from loguru import logger
 
@@ -76,6 +78,36 @@ class ModelManager:
             device=device,
             precision=precision,
         )
+        # Alternate VQ decode mitigation: imagilux/miopen-conv-fix C++ extension.
+        # Calls MIOpen's Immediate Mode API directly with proper workspace
+        # allocation, dispatching AMD's hand-tuned conv kernels instead of
+        # the workspace=0 <GemmFwdRest> fallback.
+        #
+        # WARNING: same-process use page-faults on Strix Halo (gfx1151) — the
+        # LLM's hipMalloc/hipFree pressure leaves stale GPU page tables, and
+        # the first conv call crashes with `Memory access fault by GPU node-1
+        # ... Page not present or supervisor privilege.` Same bug imagilux
+        # documents for gfx1201; their workaround is running the decoder in
+        # a separate process with its own HIP context.
+        #
+        # Until we add a subprocess decoder, prefer FISH_DISABLE_MIOPEN=1
+        # (PyTorch built-in GEMM-conv path, ~6x speedup, stable). This hook
+        # is left in place so the patching path is one env var away if/when
+        # subprocess isolation lands.
+        if os.environ.get("FISH_USE_MIOPEN_CONV_FIX", "0") == "1":
+            try:
+                import miopen_conv_fix
+                n = miopen_conv_fix.patch_module(self.decoder_model)
+                logger.info(
+                    f"miopen-conv-fix: patched {n} Conv1d/ConvTranspose1d layers"
+                )
+            except ImportError:
+                logger.warning(
+                    "FISH_USE_MIOPEN_CONV_FIX=1 set but miopen_conv_fix not "
+                    "installed; build from "
+                    "https://github.com/imagilux/miopen-conv-fix and install "
+                    "with `uv pip install --no-build-isolation --no-deps ./miopen-conv-fix`"
+                )
         logger.info("Decoder model loaded.")
 
     def warm_up(self, tts_inference_engine) -> None:
