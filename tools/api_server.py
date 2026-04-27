@@ -9,6 +9,17 @@ from threading import Lock
 # CUDA). Mirrors tools/run_webui.py — must be set before `import torch`.
 os.environ.setdefault("TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL", "1")
 
+import torch
+
+# Workaround for PyTorch issue #150168 on ROCm: HIP convolutions pass
+# workspace=0 to MIOpen, forcing it onto the slow <GemmFwdRest> solver.
+# Disabling MIOpen here makes torch dispatch convs through its built-in
+# GEMM-based path. Affects only the DAC decoder (LLM is a transformer,
+# no convs). Opt-in via FISH_DISABLE_MIOPEN=1.
+if os.environ.get("FISH_DISABLE_MIOPEN", "0") == "1":
+    torch.backends.cudnn.enabled = False
+    torch.backends.cudnn.benchmark = False
+
 import pyrootutils
 import uvicorn
 from kui.asgi import (

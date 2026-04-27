@@ -12,6 +12,15 @@ import pyrootutils
 import torch
 from loguru import logger
 
+# Workaround for PyTorch issue #150168 on ROCm: HIP convolutions pass
+# workspace=0 to MIOpen, forcing it onto the slow <GemmFwdRest> solver.
+# Disabling MIOpen makes torch dispatch convs through its built-in
+# GEMM-based path. Affects only the DAC decoder (LLM is transformer,
+# no convs). Opt-in via FISH_DISABLE_MIOPEN=1.
+if os.environ.get("FISH_DISABLE_MIOPEN", "0") == "1":
+    torch.backends.cudnn.enabled = False
+    torch.backends.cudnn.benchmark = False
+
 pyrootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
 from fish_speech.inference_engine import TTSInferenceEngine
